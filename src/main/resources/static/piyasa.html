@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Professional Crypto Trading Signals - AI-Powered Analysis</title>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+      background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+      color: #eaecef;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding: 30px 20px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    h1 {
+      font-size: 32px;
+      background: linear-gradient(135deg, #f3ba2f 0%, #ffd700 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+
+    .subtitle {
+      color: #aaa;
+      font-size: 14px;
+    }
+
+    .subtitle strong {
+      color: #f3ba2f;
+    }
+
+    .status {
+      text-align: center;
+      padding: 15px;
+      margin-bottom: 20px;
+      background: rgba(243, 186, 47, 0.1);
+      border-radius: 8px;
+      font-size: 14px;
+      border: 1px solid rgba(243, 186, 47, 0.3);
+    }
+
+    .status.loading {
+      color: #f3ba2f;
+      font-weight: 600;
+    }
+
+    .status.live {
+      background: rgba(46, 204, 113, 0.1);
+      border-color: rgba(46, 204, 113, 0.3);
+      color: #2ecc71;
+    }
+
+    .table-container {
+      overflow-x: auto;
+      background: rgba(24, 26, 32, 0.8);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th {
+      background: linear-gradient(135deg, #2b2f36 0%, #1a1d24 100%);
+      color: #aaa;
+      padding: 15px 12px;
+      text-align: left;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      border-bottom: 2px solid rgba(243, 186, 47, 0.3);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    td {
+      padding: 15px 12px;
+      border-bottom: 1px solid rgba(43, 47, 54, 0.5);
+      transition: all 0.2s ease;
+    }
+
+    tr:hover td {
+      background: rgba(243, 186, 47, 0.05);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .symbol {
+      font-weight: 700;
+      font-size: 15px;
+      color: #fff;
+    }
+
+    .price {
+      font-weight: 700;
+      font-size: 16px;
+      color: #f3ba2f;
+      font-family: 'Courier New', monospace;
+    }
+
+    .change {
+      font-weight: 600;
+      font-size: 14px;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    .change.positive {
+      color: #2ecc71;
+      background: rgba(46, 204, 113, 0.1);
+    }
+
+    .change.negative {
+      color: #ff4d4f;
+      background: rgba(255, 77, 79, 0.1);
+    }
+
+    .signal {
+      font-weight: 700;
+      font-size: 13px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      text-align: center;
+      display: inline-block;
+      min-width: 120px;
+      text-shadow: 0 0 10px currentColor;
+      letter-spacing: 0.5px;
+    }
+
+    .confidence {
+      font-weight: 600;
+      color: #f3ba2f;
+    }
+
+    .confidence-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .confidence-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #f3ba2f 0%, #ffd700 100%);
+      transition: width 0.3s ease;
+      border-radius: 3px;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-live {
+      background: rgba(46, 204, 113, 0.2);
+      color: #2ecc71;
+      border: 1px solid rgba(46, 204, 113, 0.3);
+    }
+
+    .status-no-data {
+      background: rgba(149, 165, 166, 0.2);
+      color: #95a5a6;
+      border: 1px solid rgba(149, 165, 166, 0.3);
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      padding: 20px;
+      font-size: 12px;
+      color: #888;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+
+    footer strong {
+      color: #f3ba2f;
+    }
+
+    .disclaimer {
+      background: rgba(255, 77, 79, 0.1);
+      border: 1px solid rgba(255, 77, 79, 0.3);
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 20px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 24px;
+      }
+      
+      table {
+        font-size: 12px;
+      }
+      
+      th, td {
+        padding: 10px 8px;
+      }
+      
+      .signal {
+        min-width: 90px;
+        font-size: 11px;
+        padding: 4px 8px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <header>
+    <h1>🚀 Professional Crypto Trading Signals</h1>
+    <p class="subtitle">AI-Powered Multi-Indicator Analysis • <strong>RSI + MACD + Trend + Volume</strong></p>
+  </header>
+
+  <div id="status" class="status loading">
+    ⏳ Loading professional analysis...
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Price (USD)</th>
+          <th>Change (24h)</th>
+          <th>Signal</th>
+          <th>Confidence</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <footer>
+    <div class="disclaimer">
+      <strong>⚠️ IMPORTANT DISCLAIMER</strong><br>
+      These signals are generated using technical analysis (RSI, MACD, trend analysis, and volume indicators). 
+      <strong>This is NOT financial advice.</strong> Cryptocurrency trading involves significant risk. 
+      Always do your own research (DYOR) and never invest more than you can afford to lose. 
+      Past performance does not guarantee future results.
+    </div>
+    <br>
+    <p>Data updates every 10 minutes • Powered by CoinGecko API • Real-time professional analysis</p>
+  </footer>
+</div>
+
+<script>
+
+let firstLoad = true;
+
+async function load() {
+  const status = document.getElementById('status');
+  const rows = document.getElementById('rows');
+
+  try {
+    if (firstLoad) {
+      status.innerHTML = "⏳ Loading professional analysis...";
+      status.className = "status loading";
+    }
+
+    const res = await fetch('/api/piyasa?ts=' + Date.now(), {
+      cache: "no-store"
+    });
+
+    if (!res.ok) throw new Error("HTTP " + res.status);
+
+    const data = await res.json();
+
+    if (!Array.isArray(data) || data.length === 0) {
+      status.innerHTML = "⚠️ No market data received";
+      status.className = "status";
+      return;
+    }
+
+    rows.innerHTML = "";
+
+    data.forEach(c => {
+      const tr = document.createElement('tr');
+      const signalColor = c.sigColor || "#888";
+      const changeValue = parseFloat(c.change) || 0;
+      const confidence = parseInt(c.confidence) || 0;
+
+      tr.innerHTML = `
+        <td><span class="symbol">${c.symbol || "-"}</span></td>
+        <td><span class="price">$${c.price || "-"}</span></td>
+        <td>
+          <span class="change ${changeValue >= 0 ? 'positive' : 'negative'}">
+            ${changeValue > 0 ? '▲' : changeValue < 0 ? '▼' : '•'} 
+            ${changeValue > 0 ? '+' : ''}${c.change || "0"}%
+          </span>
+        </td>
+        <td>
+          <span class="signal" style="color:${signalColor};border:1px solid ${signalColor}40;background:${signalColor}15">
+            ${c.signal || "NEUTRAL"}
+          </span>
+        </td>
+        <td>
+          <div>
+            <span class="confidence">${confidence}%</span>
+            <div class="confidence-bar">
+              <div class="confidence-fill" style="width:${confidence}%"></div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <span class="status-badge ${c.regime === 'LIVE' ? 'status-live' : 'status-no-data'}">
+            ${c.regime === 'LIVE' ? '● LIVE' : 'NO DATA'}
+          </span>
+        </td>
+      `;
+
+      rows.appendChild(tr);
+    });
+
+    status.innerHTML = "✅ Live Analysis • Updated: " + new Date().toLocaleTimeString();
+    status.className = "status live";
+
+    firstLoad = false;
+
+  } catch (e) {
+    console.error(e);
+    status.innerHTML = "❌ API Error: " + e.message;
+    status.className = "status";
+  }
+}
+
+load();
+
+/* Refresh every 30 seconds */
+setInterval(load, 30000);
+
+</script>
+
+</body>
+</html>

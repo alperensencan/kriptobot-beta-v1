@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fear & Greed Index - Kripto Piyasa Duygusu</title>
+
+  <style>
+    body{
+      font-family:system-ui,Arial;
+      margin:24px;
+      background:#0b0e11;
+      color:#eaecef;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      min-height:100vh;
+    }
+
+    h2{
+      color:#f3ba2f;
+      text-align:center;
+    }
+
+    .container{
+      max-width:600px;
+      width:100%;
+      background:#181a20;
+      border-radius:16px;
+      padding:40px;
+      box-shadow:0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    .gauge-container{
+      position:relative;
+      width:300px;
+      height:150px;
+      margin:40px auto;
+    }
+
+    .gauge{
+      width:300px;
+      height:150px;
+      background:linear-gradient(to right, 
+        #ff4d4f 0%, 
+        #ff9800 25%, 
+        #95a5a6 50%, 
+        #8bc34a 75%, 
+        #00ff41 100%);
+      border-radius:150px 150px 0 0;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .gauge-overlay{
+      position:absolute;
+      bottom:0;
+      left:50%;
+      transform:translateX(-50%);
+      width:240px;
+      height:120px;
+      background:#181a20;
+      border-radius:120px 120px 0 0;
+    }
+
+    .needle{
+      position:absolute;
+      bottom:0;
+      left:50%;
+      width:4px;
+      height:120px;
+      background:#fff;
+      transform-origin:bottom center;
+      transform:translateX(-50%) rotate(-90deg);
+      transition:transform 1s ease-out;
+      box-shadow:0 0 10px rgba(255,255,255,0.5);
+    }
+
+    .needle::after{
+      content:'';
+      position:absolute;
+      top:-10px;
+      left:-6px;
+      width:16px;
+      height:16px;
+      background:#fff;
+      border-radius:50%;
+      box-shadow:0 0 15px rgba(255,255,255,0.8);
+    }
+
+    .value-display{
+      text-align:center;
+      margin-top:-30px;
+      position:relative;
+      z-index:10;
+    }
+
+    .value-number{
+      font-size:64px;
+      font-weight:bold;
+      line-height:1;
+    }
+
+    .value-label{
+      font-size:24px;
+      margin-top:8px;
+      font-weight:600;
+    }
+
+    .sentiment{
+      text-align:center;
+      font-size:20px;
+      margin-top:20px;
+      padding:16px;
+      background:#2b2f36;
+      border-radius:8px;
+    }
+
+    .scale{
+      display:flex;
+      justify-content:space-between;
+      margin-top:30px;
+      font-size:12px;
+      color:#aaa;
+    }
+
+    .info{
+      margin-top:30px;
+      padding:20px;
+      background:#2b2f36;
+      border-radius:8px;
+      font-size:14px;
+      line-height:1.6;
+    }
+
+    .info h3{
+      color:#f3ba2f;
+      margin-top:0;
+    }
+
+    .last-update{
+      text-align:center;
+      margin-top:20px;
+      font-size:12px;
+      color:#888;
+    }
+
+    .loading{
+      text-align:center;
+      color:#f3ba2f;
+      font-size:18px;
+    }
+  </style>
+</head>
+
+<body>
+
+<h2>💹 Fear & Greed Index</h2>
+
+<div class="container">
+  <div id="status" class="loading">Yükleniyor...</div>
+
+  <div id="content" style="display:none">
+    <div class="gauge-container">
+      <div class="gauge">
+        <div class="gauge-overlay"></div>
+        <div class="needle" id="needle"></div>
+      </div>
+    </div>
+
+    <div class="value-display">
+      <div class="value-number" id="value">--</div>
+      <div class="value-label" id="classification">--</div>
+    </div>
+
+    <div class="sentiment" id="sentiment">--</div>
+
+    <div class="scale">
+      <span>0<br>Aşırı Korku</span>
+      <span>25<br>Korku</span>
+      <span>50<br>Nötr</span>
+      <span>75<br>Açgözlülük</span>
+      <span>100<br>Aşırı Açgözlülük</span>
+    </div>
+
+    <div class="info">
+      <h3>📊 Bu Ne Anlama Geliyor?</h3>
+      <p><strong>0-24:</strong> Aşırı Korku - Piyasa çok kötümser, potansiyel alım fırsatı</p>
+      <p><strong>25-49:</strong> Korku - Yatırımcılar endişeli</p>
+      <p><strong>50-74:</strong> Açgözlülük - Piyasa iyimser</p>
+      <p><strong>75-100:</strong> Aşırı Açgözlülük - Balon riski, dikkatli ol!</p>
+    </div>
+
+    <div class="last-update" id="lastUpdate">Son güncelleme: --</div>
+  </div>
+</div>
+
+<script>
+
+async function load() {
+  const status = document.getElementById('status');
+  const content = document.getElementById('content');
+
+  try {
+    const res = await fetch('/api/fear-greed?ts=' + Date.now());
+    if (!res.ok) throw new Error("HTTP " + res.status);
+
+    const data = await res.json();
+
+    // Göstergeyi güncelle
+    document.getElementById('value').textContent = data.value;
+    document.getElementById('value').style.color = data.color;
+    document.getElementById('classification').textContent = data.classification;
+    document.getElementById('sentiment').textContent = data.sentiment;
+
+    // İğneyi döndür (-90deg = sol, +90deg = sağ)
+    const rotation = -90 + (data.value * 1.8); // 0-100 -> -90 to +90
+    document.getElementById('needle').style.transform = 
+      `translateX(-50%) rotate(${rotation}deg)`;
+
+    // Zaman damgası
+    const date = new Date(data.timestamp * 1000);
+    document.getElementById('lastUpdate').textContent = 
+      'Son güncelleme: ' + date.toLocaleString('tr-TR');
+
+    // İçeriği göster
+    status.style.display = 'none';
+    content.style.display = 'block';
+
+  } catch (e) {
+    console.error(e);
+    status.textContent = 'Hata: ' + e.message;
+  }
+}
+
+load();
+
+// Her 60 saniyede bir güncelle
+setInterval(load, 60000);
+
+</script>
+
+</body>
+</html>
