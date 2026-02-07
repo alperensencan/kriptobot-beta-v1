@@ -17,24 +17,17 @@ import java.util.*;
 @Service
 public class CoinService {
 
-  /**
-   * RATE LIMIT SOLUTION:
-   * - Cache: 30 MINUTES (was 10)
-   * - Batch delay: 10 SECONDS (was 1.5)
-   * - Max coins: 200
-   * This = 2 requests per 30 minutes = SAFE!
-   */
-  private static final Duration CACHE_TTL = Duration.ofMinutes(30); // 30 minutes!
-  private static final Duration CHART_CACHE_TTL = Duration.ofHours(2); // 2 hours
-  private static final int BATCH_DELAY_MS = 10000; // 10 seconds between batches
+  private static final Duration CACHE_TTL = Duration.ofMinutes(20);
+  private static final int BATCH_SIZE = 50; // Smaller batches!
+  private static final int BATCH_DELAY_MS = 15000; // 15 seconds!
 
   private final ObjectMapper om = new ObjectMapper();
   private final HttpClient http = HttpClient.newBuilder()
       .connectTimeout(Duration.ofSeconds(15))
       .build();
 
+  // TOP 100 MOST POPULAR COINS ONLY
   private final Map<String, String> coins = new LinkedHashMap<>() {{
-    // Top 200 coins - same as before
     put("bitcoin", "BTC");
     put("ethereum", "ETH");
     put("tether", "USDT");
@@ -135,101 +128,10 @@ public class CoinService {
     put("blur", "BLUR");
     put("celestia", "TIA");
     put("pendle", "PENDLE");
-    put("mantle", "MNT");
-    put("bittensor", "TAO");
-    put("raydium", "RAY");
-    put("jito-governance-token", "JTO");
-    put("ondo-finance", "ONDO");
-    put("wormhole", "W");
-    put("jupiter-exchange-solana", "JUP");
-    put("starknet", "STRK");
-    put("dymension", "DYM");
-    put("pyth-network", "PYTH");
-    put("ethena", "ENA");
-    put("wrapped-bitcoin", "WBTC");
-    put("dai", "DAI");
-    put("frax", "FRAX");
-    put("terra-luna", "LUNC");
-    put("stepn", "GMT");
-    put("trust-wallet-token", "TWT");
-    put("yearn-finance", "YFI");
-    put("balancer", "BAL");
-    put("bancor", "BNT");
-    put("kyber-network-crystal", "KNC");
-    put("0x", "ZRX");
-    put("reserve-rights-token", "RSR");
-    put("band-protocol", "BAND");
-    put("ocean-protocol", "OCEAN");
-    put("nkn", "NKN");
-    put("reef", "REEF");
-    put("dent", "DENT");
-    put("chromia", "CHR");
-    put("holotoken", "HOT");
-    put("wax", "WAXP");
-    put("iotex", "IOTX");
-    put("origin-protocol", "OGN");
-    put("skale", "SKL");
-    put("storj", "STORJ");
-    put("golem", "GLM");
-    put("civic", "CVC");
-    put("metal", "MTL");
-    put("numeraire", "NMR");
-    put("status", "SNT");
-    put("power-ledger", "POWR");
-    put("wanchain", "WAN");
-    put("dodo", "DODO");
-    put("alpha-finance", "ALPHA");
-    put("masknetwork", "MASK");
-    put("gitcoin", "GTC");
-    put("api3", "API3");
-    put("adventure-gold", "AGLD");
-    put("clover-finance", "CLV");
-    put("quickswap", "QUICK");
-    put("perpetual-protocol", "PERP");
-    put("audius", "AUDIO");
-    put("livepeer", "LPT");
-    put("ethereum-name-service", "ENS");
-    put("illuvium", "ILV");
-    put("vulcan-forged", "PYR");
-    put("bitcoin-gold", "BTG");
-    put("horizen", "ZEN");
-    put("verge", "XVG");
-    put("digibyte", "DGB");
-    put("syscoin", "SYS");
-    put("stratis", "STRAX");
-    put("ark", "ARK");
-    put("lisk", "LSK");
-    put("icon", "ICX");
-    put("ontology", "ONT");
-    put("nano", "XNO");
-    put("decred", "DCR");
-    put("steem", "STEEM");
-    put("siacoin", "SC");
-    put("komodo", "KMD");
-    put("constellation-labs", "DAG");
-    put("energy-web-token", "EWT");
-    put("ampleforth", "AMPL");
-    put("marlin", "POND");
-    put("xyo-network", "XYO");
-    put("ren", "REN");
-    put("orchid-protocol", "OXT");
-    put("celer-network", "CELR");
-    put("cartesi", "CTSI");
-    put("tellor", "TRB");
-    put("uma", "UMA");
-    put("keep-network", "KEEP");
-    put("nucypher", "NU");
-    put("barnbridge", "BOND");
-    put("badger-dao", "BADGER");
-    put("alchemix", "ALCX");
-    put("frax-share", "FXS");
-    put("liquity", "LQTY");
   }};
 
   private volatile Instant lastFetch = Instant.EPOCH;
-  private volatile Instant lastChartFetch = Instant.EPOCH;
   private volatile Map<String, MarketData> cache = new LinkedHashMap<>();
-  private volatile Map<String, List<Double>> chartCache = new LinkedHashMap<>();
   private volatile boolean isFetching = false;
 
   public List<CoinDto> getPiyasa() {
@@ -239,62 +141,83 @@ public class CoinService {
 
   private void refreshIfNeeded() {
     Instant now = Instant.now();
+    long cacheAgeMinutes = Duration.between(lastFetch, now).toMinutes();
     
-    // Check if we need to refresh
-    boolean needsRefresh = Duration.between(lastFetch, now).compareTo(CACHE_TTL) >= 0 || cache.isEmpty();
+    boolean needsRefresh = cacheAgeMinutes >= 20 || cache.isEmpty();
     
     if (needsRefresh && !isFetching) {
       isFetching = true;
-      System.out.println("🔄 Starting data fetch... (Cache age: " + Duration.between(lastFetch, now).toMinutes() + " min)");
+      System.out.println("🔄 Refresh needed (cache age: " + cacheAgeMinutes + " min)");
       
-      // Fetch in background thread to avoid blocking
       new Thread(() -> {
         try {
-          Map<String, MarketData> allData = fetchAllData();
+          Map<String, MarketData> allData = fetchAllDataSafely();
           if (!allData.isEmpty()) {
             cache = allData;
             lastFetch = Instant.now();
-            System.out.println("✅ SUCCESS: " + allData.size() + " coins cached. Next update in 30 min.");
+            System.out.println("✅ CACHE UPDATED: " + allData.size() + "/" + coins.size() + " coins");
+          } else {
+            System.err.println("❌ Fetch failed completely");
           }
         } catch (Exception e) {
-          System.err.println("❌ Fetch failed: " + e.getMessage());
+          System.err.println("❌ Exception: " + e.getMessage());
+          e.printStackTrace();
         } finally {
           isFetching = false;
         }
       }).start();
-    }
-
-    // Chart data (very infrequent)
-    if (Duration.between(lastChartFetch, now).compareTo(CHART_CACHE_TTL) >= 0 && chartCache.isEmpty()) {
-      System.out.println("📊 Fetching chart data (once every 2 hours)...");
-      chartCache = fetchChartData();
-      lastChartFetch = now;
+    } else if (cache.isEmpty()) {
+      System.out.println("⏳ Waiting for first fetch to complete...");
     }
   }
 
-  private Map<String, MarketData> fetchAllData() {
+  private Map<String, MarketData> fetchAllDataSafely() {
     Map<String, MarketData> allData = new LinkedHashMap<>();
     List<String> coinIds = new ArrayList<>(coins.keySet());
-    int batchSize = 100;
     
-    for (int i = 0; i < coinIds.size(); i += batchSize) {
-      int end = Math.min(i + batchSize, coinIds.size());
+    int totalBatches = (coinIds.size() + BATCH_SIZE - 1) / BATCH_SIZE;
+    System.out.println("📊 Total batches: " + totalBatches + " (batch size: " + BATCH_SIZE + ")");
+    
+    for (int i = 0; i < coinIds.size(); i += BATCH_SIZE) {
+      int end = Math.min(i + BATCH_SIZE, coinIds.size());
       List<String> batch = coinIds.subList(i, end);
-      int batchNum = (i / batchSize) + 1;
-      int totalBatches = (coinIds.size() + batchSize - 1) / batchSize;
+      int batchNum = (i / BATCH_SIZE) + 1;
       
-      System.out.println("📦 Batch " + batchNum + "/" + totalBatches + ": " + batch.size() + " coins");
+      System.out.println("\n📦 Batch " + batchNum + "/" + totalBatches + ": " + batch.size() + " coins");
       
-      Map<String, MarketData> batchData = fetchBatch(batch);
+      int retries = 0;
+      Map<String, MarketData> batchData = null;
       
-      if (!batchData.isEmpty()) {
-        allData.putAll(batchData);
-        System.out.println("   ✅ Success: " + batchData.size() + " coins");
-      } else {
-        System.err.println("   ❌ Failed - will retry in 30 min");
+      while (retries < 3 && (batchData == null || batchData.isEmpty())) {
+        if (retries > 0) {
+          System.out.println("   🔄 Retry " + retries + "/3...");
+        }
+        
+        batchData = fetchBatchWithRetry(batch);
+        
+        if (batchData != null && !batchData.isEmpty()) {
+          allData.putAll(batchData);
+          System.out.println("   ✅ Got " + batchData.size() + "/" + batch.size() + " coins");
+          break;
+        }
+        
+        retries++;
+        if (retries < 3) {
+          try {
+            System.out.println("   ⏳ Waiting 30s before retry...");
+            Thread.sleep(30000);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return allData;
+          }
+        }
       }
       
-      // Wait 10 seconds between batches
+      if (batchData == null || batchData.isEmpty()) {
+        System.err.println("   ❌ Batch failed after 3 retries, skipping");
+      }
+      
+      // Wait between batches
       if (end < coinIds.size()) {
         try {
           System.out.println("   ⏳ Waiting " + (BATCH_DELAY_MS/1000) + "s before next batch...");
@@ -306,18 +229,17 @@ public class CoinService {
       }
     }
     
+    System.out.println("\n📊 FINAL: " + allData.size() + "/" + coins.size() + " coins successfully cached");
     return allData;
   }
 
-  private Map<String, MarketData> fetchBatch(List<String> coinIds) {
+  private Map<String, MarketData> fetchBatchWithRetry(List<String> coinIds) {
     try {
       String ids = String.join(",", coinIds);
       String url = "https://api.coingecko.com/api/v3/simple/price" +
           "?ids=" + ids +
           "&vs_currencies=usd" +
-          "&include_24hr_change=true" +
-          "&include_24hr_vol=true" +
-          "&include_market_cap=true";
+          "&include_24hr_change=true";
 
       HttpRequest req = HttpRequest.newBuilder()
           .uri(URI.create(url))
@@ -329,14 +251,15 @@ public class CoinService {
 
       HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
       
+      System.out.println("   📡 Response: " + res.statusCode());
+      
       if (res.statusCode() == 429) {
-        System.err.println("   ⚠️  RATE LIMIT - waiting 60s...");
-        Thread.sleep(60000);
+        System.err.println("   ⚠️  RATE LIMIT!");
         return Map.of();
       }
       
       if (res.statusCode() != 200) {
-        System.err.println("   ❌ HTTP " + res.statusCode());
+        System.err.println("   ❌ HTTP " + res.statusCode() + ": " + res.body().substring(0, Math.min(200, res.body().length())));
         return Map.of();
       }
 
@@ -345,14 +268,18 @@ public class CoinService {
 
       for (String id : coinIds) {
         JsonNode coin = root.get(id);
-        if (coin == null) continue;
+        if (coin == null) {
+          System.err.println("   ⚠️  Missing: " + id);
+          continue;
+        }
 
         BigDecimal price = bd(coin.get("usd"));
-        if (price.compareTo(BigDecimal.ZERO) == 0) continue;
+        if (price.compareTo(BigDecimal.ZERO) == 0) {
+          System.err.println("   ⚠️  Zero price: " + id);
+          continue;
+        }
 
         BigDecimal change24h = bd(coin.get("usd_24h_change"));
-        BigDecimal volume = bd(coin.get("usd_24h_vol"));
-        BigDecimal marketCap = bd(coin.get("usd_market_cap"));
 
         MarketData data = new MarketData(
             price,
@@ -360,8 +287,8 @@ public class CoinService {
             change24h,
             change24h.multiply(BigDecimal.valueOf(2.5)),
             change24h.multiply(BigDecimal.valueOf(8)),
-            volume,
-            marketCap
+            BigDecimal.ZERO,
+            BigDecimal.ZERO
         );
         result.put(id, data);
       }
@@ -369,32 +296,9 @@ public class CoinService {
       return result;
 
     } catch (Exception e) {
-      System.err.println("   ❌ Error: " + e.getMessage());
+      System.err.println("   ❌ Exception: " + e.getMessage());
       return Map.of();
     }
-  }
-
-  private Map<String, List<Double>> fetchChartData() {
-    Map<String, List<Double>> charts = new LinkedHashMap<>();
-    List<String> topCoins = List.of("bitcoin", "ethereum", "binancecoin");
-    
-    for (String coinId : topCoins) {
-      try {
-        String url = "https://api.coingecko.com/api/v3/coins/" + coinId + "/market_chart?vs_currency=usd&days=30&interval=daily";
-        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(20)).header("User-Agent", "Mozilla/5.0").GET().build();
-        HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
-        if (res.statusCode() != 200) continue;
-
-        JsonNode root = om.readTree(res.body());
-        List<Double> priceList = new ArrayList<>();
-        for (JsonNode price : root.path("prices")) {
-          priceList.add(price.get(1).asDouble());
-        }
-        if (priceList.size() >= 14) charts.put(coinId, priceList);
-        Thread.sleep(2000);
-      } catch (Exception e) {}
-    }
-    return charts;
   }
 
   private List<CoinDto> buildDtosFromCache() {
@@ -410,33 +314,34 @@ public class CoinService {
         continue;
       }
 
-      List<Double> prices = chartCache.get(id);
-      TechnicalIndicators.SignalResult signal;
+      int trendScore = TechnicalIndicators.analyzeTrend(
+          data.change1h.doubleValue(),
+          data.change24h.doubleValue(),
+          data.change7d.doubleValue(),
+          data.change30d.doubleValue()
+      );
       
-      if (prices != null && prices.size() >= 14) {
-        double rsi = TechnicalIndicators.calculateRSI(prices, 14);
-        double[] macd = TechnicalIndicators.calculateMACD(prices);
-        int trendScore = TechnicalIndicators.analyzeTrend(
-            data.change1h.doubleValue(),
-            data.change24h.doubleValue(),
-            data.change7d.doubleValue(),
-            data.change30d.doubleValue()
-        );
-        signal = TechnicalIndicators.generateSignal(rsi, macd, trendScore, 1.2, data.change24h.doubleValue());
-      } else {
-        int trendScore = TechnicalIndicators.analyzeTrend(
-            data.change1h.doubleValue(),
-            data.change24h.doubleValue(),
-            data.change7d.doubleValue(),
-            data.change30d.doubleValue()
-        );
-        double estimatedRSI = 50 + data.change24h.doubleValue();
-        estimatedRSI = Math.max(10, Math.min(90, estimatedRSI));
-        double macdEst = data.change24h.doubleValue() > 0 ? 0.5 : -0.5;
-        signal = TechnicalIndicators.generateSignal(estimatedRSI, new double[]{macdEst, 0, macdEst}, trendScore, 1.0, data.change24h.doubleValue());
-      }
+      double estimatedRSI = 50 + data.change24h.doubleValue();
+      estimatedRSI = Math.max(10, Math.min(90, estimatedRSI));
+      double macdEst = data.change24h.doubleValue() > 0 ? 0.5 : -0.5;
+      
+      TechnicalIndicators.SignalResult signal = TechnicalIndicators.generateSignal(
+          estimatedRSI, 
+          new double[]{macdEst, 0, macdEst}, 
+          trendScore, 
+          1.0, 
+          data.change24h.doubleValue()
+      );
 
-      result.add(new CoinDto(symbol, "LIVE", fmtMoney(data.price), fmtPct(data.change24h), String.valueOf(signal.confidence), signal.signal, signal.color));
+      result.add(new CoinDto(
+          symbol, 
+          "LIVE", 
+          fmtMoney(data.price), 
+          fmtPct(data.change24h), 
+          String.valueOf(signal.confidence), 
+          signal.signal, 
+          signal.color
+      ));
     }
 
     return result;
