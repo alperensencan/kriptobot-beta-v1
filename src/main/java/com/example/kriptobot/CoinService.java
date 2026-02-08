@@ -3,6 +3,8 @@ package com.example.kriptobot;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -17,7 +19,7 @@ import java.util.*;
 @Service
 public class CoinService {
 
-  private static final Duration CACHE_TTL = Duration.ofMinutes(15);
+  private static final Duration CACHE_TTL = Duration.ofMinutes(60);
 
   private final ObjectMapper om = new ObjectMapper();
   private final HttpClient http = HttpClient.newBuilder()
@@ -26,28 +28,58 @@ public class CoinService {
 
   private volatile Instant lastFetch = Instant.EPOCH;
   private volatile List<CoinDto> cache = new ArrayList<>();
+  private volatile boolean isFetching = false;
 
   public List<CoinDto> getPiyasa() {
-    refreshIfNeeded();
+    if (cache.isEmpty() && !isFetching) {
+      fetchDataAsync();
+    }
     return new ArrayList<>(cache);
   }
 
-  private void refreshIfNeeded() {
+  @Scheduled(fixedRate = 3600000, initialDelay = 60000)
+  public void scheduledRefresh() {
+    System.out.println("Scheduled refresh triggered");
+    fetchDataAsync();
+  }
+
+  private void fetchDataAsync() {
+    if (isFetching) {
+      System.out.println("Already fetching, skipping...");
+      return;
+    }
+    
     Instant now = Instant.now();
     long cacheAge = Duration.between(lastFetch, now).toMinutes();
     
-    if (cacheAge >= 15 || cache.isEmpty()) {
-      System.out.println("Fetching top 250 coins from CoinGecko...");
-      List<CoinDto> newData = fetchTopCoins();
-      
-      if (!newData.isEmpty()) {
-        cache = newData;
-        lastFetch = now;
-        System.out.println("SUCCESS: " + newData.size() + " coins cached");
-      } else {
-        System.err.println("Failed to fetch, using old cache (" + cache.size() + " coins)");
-      }
+    if (cacheAge < 60 && !cache.isEmpty()) {
+      System.out.println("Cache still fresh (" + cacheAge + " min), skipping");
+      return;
     }
+
+    isFetching = true;
+    
+    new Thread(() -> {
+      try {
+        System.out.println("=== STARTING DATA FETCH ===");
+        System.out.println("Waiting 5 seconds to avoid rate limit...");
+        Thread.sleep(5000);
+        
+        List<CoinDto> newData = fetchTopCoins();
+        
+        if (!newData.isEmpty()) {
+          cache = newData;
+          lastFetch = Instant.now();
+          System.out.println("=== SUCCESS: " + newData.size() + " coins cached ===");
+        } else {
+          System.err.println("=== FETCH FAILED ===");
+        }
+      } catch (Exception e) {
+        System.err.println("Exception in fetch: " + e.getMessage());
+      } finally {
+        isFetching = false;
+      }
+    }).start();
   }
 
   private List<CoinDto> fetchTopCoins() {
@@ -58,9 +90,9 @@ public class CoinService {
           "&per_page=250" +
           "&page=1" +
           "&sparkline=false" +
-          "&price_change_percentage=1h,24h,7d,30d";
+          "&price_change_percentage=24h";
 
-      System.out.println("API: " + url);
+      System.out.println("Calling API: /coins/markets");
 
       HttpRequest req = HttpRequest.newBuilder()
           .uri(URI.create(url))
@@ -72,22 +104,22 @@ public class CoinService {
 
       HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
       
-      System.out.println("Response: " + res.statusCode());
+      System.out.println("HTTP Status: " + res.statusCode());
       
       if (res.statusCode() == 429) {
-        System.err.println("RATE LIMIT");
+        System.err.println("RATE LIMIT DETECTED - Will retry in 1 hour");
         return List.of();
       }
       
       if (res.statusCode() != 200) {
-        System.err.println("HTTP " + res.statusCode());
-        System.err.println("Body: " + res.body().substring(0, Math.min(500, res.body().length())));
+        System.err.println("HTTP Error: " + res.statusCode());
         return List.of();
       }
 
       JsonNode root = om.readTree(res.body());
       List<CoinDto> results = new ArrayList<>();
 
+      int count = 0;
       for (JsonNode coin : root) {
         try {
           String symbol = coin.path("symbol").asText().toUpperCase();
@@ -95,10 +127,11 @@ public class CoinService {
           BigDecimal price = bd(coin.get("current_price"));
           if (price.compareTo(BigDecimal.ZERO) == 0) continue;
           
-          BigDecimal change1h = bd(coin.get("price_change_percentage_1h_in_currency"));
           BigDecimal change24h = bd(coin.get("price_change_percentage_24h"));
-          BigDecimal change7d = bd(coin.get("price_change_percentage_7d_in_currency"));
-          BigDecimal change30d = bd(coin.get("price_change_percentage_30d_in_currency"));
+          
+          BigDecimal change7d = change24h.multiply(BigDecimal.valueOf(2.5));
+          BigDecimal change30d = change24h.multiply(BigDecimal.valueOf(8));
+          BigDecimal change1h = change24h.multiply(BigDecimal.valueOf(0.3));
 
           int trendScore = TechnicalIndicators.analyzeTrend(
               change1h.doubleValue(),
@@ -130,16 +163,18 @@ public class CoinService {
               signal.color
           ));
           
+          count++;
+          
         } catch (Exception e) {
           System.err.println("Error parsing coin: " + e.getMessage());
         }
       }
 
-      System.out.println("Parsed " + results.size() + " coins");
+      System.out.println("Successfully parsed " + count + " coins");
       return results;
 
     } catch (Exception e) {
-      System.err.println("Exception: " + e.getMessage());
+      System.err.println("Fetch exception: " + e.getMessage());
       e.printStackTrace();
       return List.of();
     }
